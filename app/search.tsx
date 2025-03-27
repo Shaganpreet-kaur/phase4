@@ -9,7 +9,7 @@ export default function SearchScreen() {
     if (city.trim()) {
       setLocations([...locations, city]);
       setCity('');
-    }
+    }                         
   };
 
   return (
