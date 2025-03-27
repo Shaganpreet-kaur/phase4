@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import WeatherService from '../services/API';
+import WeatherService from './services/API';
 
 export default function HomeScreen() {
   const [weather, setWeather] = useState<any>(null);
