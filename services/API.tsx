@@ -1,4 +1,4 @@
-const API_KEY = " 1d04f720c29b4685af1143558252703"; // Replace with your actual WeatherAPI key
+const API_KEY = " 1d04f720c29b4685af1143558252703"; 
 const BASE_URL = "https://api.weatherapi.com/v1";
 
 const WeatherService = {
