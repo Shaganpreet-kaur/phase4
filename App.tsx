@@ -1,55 +1,30 @@
-import React from "react";
-import { NavigationContainer } from "@react-navigation/native";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { MaterialIcons } from "@expo/vector-icons";
-import HomeScreen from "./app/home";  // ✅ Ensure the correct path
-import SearchScreen from "./app/search";
-import ForecastScreen from "./app/forecast";
-import SettingsScreen from "./app/settings";
+// App.tsx
 
-const Tab = createBottomTabNavigator();
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import HomeScreen from './app/homeScreen';
+import ForecastScreen from './app/forecastScreen';
+import LocationScreen from './app/locationScreen';
 
-export default function App() {
+const Stack = createStackNavigator();
+
+const App = () => {
   return (
     <NavigationContainer>
-      <Tab.Navigator screenOptions={{ headerShown: false }}>
-        <Tab.Screen 
-          name="Home" 
-          component={HomeScreen}  // ✅ Ensure this is correctly imported
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="home" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen 
-          name="Search" 
-          component={SearchScreen} 
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="search" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen 
-          name="Forecast" 
-          component={ForecastScreen} 
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="cloud" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen 
-          name="Settings" 
-          component={SettingsScreen} 
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="settings" size={size} color={color} />
-            ),
-          }}
-        />
-      </Tab.Navigator>
+      <Stack.Navigator
+        initialRouteName="Home"
+        screenOptions={{
+          headerShown: false,
+          cardStyle: { backgroundColor: '#1565c0' },
+        }}
+      >
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Forecast" component={ForecastScreen} />
+        <Stack.Screen name="Location" component={LocationScreen} />
+      </Stack.Navigator>
     </NavigationContainer>
   );
-}
+};
+
+export default App;
