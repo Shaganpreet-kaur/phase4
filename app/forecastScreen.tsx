@@ -1,4 +1,4 @@
-// src/screens/ForecastScreen.tsx
+
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { theme } from '../styles/theme';
