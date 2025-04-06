@@ -8,5 +8,4 @@ const WeatherService = {
     return response.json();
   },
 };
-
 export default WeatherService;
