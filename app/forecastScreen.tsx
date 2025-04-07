@@ -1,6 +1,6 @@
-
+// app/forecastScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Text, StyleSheet, SafeAreaView, StatusBar } from 'react-native';
 import { theme } from '../styles/theme';
 import NavBar from '../components/navBar';
 import WeatherService from '../services/API';
@@ -8,6 +8,7 @@ import WeatherService from '../services/API';
 const ForecastScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, route }) => {
   const [forecastData, setForecastData] = useState<any>(null);
   const [expandedDay, setExpandedDay] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState('24hours'); // Added state for active tab
   const location = route.params?.location || 'Calgary, AB';
 
   useEffect(() => {
@@ -26,38 +27,156 @@ const ForecastScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
   const navItems = [
     { icon: '🏠', label: 'Today', onPress: () => navigation.navigate('Home') },
     { icon: '📅', label: 'Forecast', isActive: true, onPress: () => {} },
-    { icon: '🗺️', label: 'Radar', onPress: () => {} },
-    { icon: '📊', label: 'Insights', onPress: () => {} },
+    { icon: '🗺️', label: 'Radar', onPress: () => navigation.navigate('Radar', { location }) },
+    { icon: '📊', label: 'Insights', onPress: () => navigation.navigate('Insights', { location }) },
   ];
 
   const toggleDayExpand = (index: number) => {
     setExpandedDay(expandedDay === index ? null : index);
   };
 
+  // Function to render different content based on active tab
+  const renderTabContent = () => {
+    switch(activeTab) {
+      case '24hours':
+        return (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hourlyScroll}>
+            {forecastData?.forecast?.forecastday[0]?.hour.map((hour: any, hourIndex: number) => {
+              const hourTime = new Date(hour.time).getHours();
+              const currentHour = new Date().getHours();
+              return (
+                <View key={hourIndex} style={styles.hourCard}>
+                  <Text style={styles.hourTime}>
+                    {hourTime === currentHour ? 'Now' : `${hourTime}:00`}
+                  </Text>
+                  <Text style={styles.hourIcon}>
+                    {getWeatherIcon(hour.condition.text, hourTime)}
+                  </Text>
+                  <Text style={styles.hourTemp}>{Math.round(hour.temp_c)}°</Text>
+                </View>
+              );
+            })}
+          </ScrollView>
+        );
+      case '7days':
+        return (
+          <View style={styles.dailyForecast}>
+            <View style={styles.dayCards}>
+              {forecastData?.forecast?.forecastday?.map((day: any, index: number) => (
+                <View key={index}>
+                  <TouchableOpacity
+                    style={styles.dayCard}
+                    onPress={() => toggleDayExpand(index)}
+                  >
+                    <View style={styles.dayInfo}>
+                      <Text style={styles.dayName}>
+                        {index === 0 ? 'Today' : index === 1 ? 'Tomorrow' : new Date(day.date).toLocaleDateString('en-US', { weekday: 'long' })}
+                      </Text>
+                      <Text style={styles.dayDate}>
+                        {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </Text>
+                    </View>
+                    <Text style={styles.dayIcon}>
+                      {getWeatherIcon(day.day.condition.text, 12)} 
+                    </Text>
+                    <View style={styles.dayTemps}>
+                      <Text style={styles.dayHigh}>{Math.round(day.day.maxtemp_c)}°</Text>
+                      <Text style={styles.dayLow}>{Math.round(day.day.mintemp_c)}°</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {expandedDay === index && (
+                    <View style={styles.dayDetails}>
+                      <View style={styles.detailsGrid}>
+                        <View style={styles.detailItem}>
+                          <Text style={styles.detailLabel}>Precipitation</Text>
+                          <Text style={styles.detailValue}>{day.day.daily_chance_of_rain}%</Text>
+                        </View>
+                        <View style={styles.detailItem}>
+                          <Text style={styles.detailLabel}>Humidity</Text>
+                          <Text style={styles.detailValue}>{day.day.avghumidity}%</Text>
+                        </View>
+                        <View style={styles.detailItem}>
+                          <Text style={styles.detailLabel}>Wind</Text>
+                          <Text style={styles.detailValue}>{day.day.maxwind_kph} km/h</Text>
+                        </View>
+                        <View style={styles.detailItem}>
+                          <Text style={styles.detailLabel}>UV Index</Text>
+                          <Text style={styles.detailValue}>{day.day.uv} ({getUvIndexLevel(day.day.uv)})</Text>
+                        </View>
+                      </View>
+
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hourlyScroll}>
+                        {day.hour.map((hour: any, hourIndex: number) => (
+                          <View key={hourIndex} style={styles.hourCard}>
+                            <Text style={styles.hourTime}>
+                              {new Date(hour.time).getHours() + ':00'}
+                            </Text>
+                            <Text style={styles.hourIcon}>
+                              {getWeatherIcon(hour.condition.text, new Date(hour.time).getHours())}
+                            </Text>
+                            <Text style={styles.hourTemp}>{Math.round(hour.temp_c)}°</Text>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        );
+      case 'radar':
+        return (
+          <View style={styles.placeholderContainer}>
+            <Text style={styles.placeholderText}>Radar View</Text>
+            <Text style={styles.placeholderSubtext}>
+              For full radar functionality, use the Radar tab in the navigation bar below.
+            </Text>
+            <TouchableOpacity
+              style={styles.navigateButton}
+              onPress={() => navigation.navigate('Radar', { location })}
+            >
+              <Text style={styles.navigateButtonText}>Go to Radar</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      default:
+        return (
+          <View style={styles.placeholderContainer}>
+            <Text style={styles.placeholderText}>No content available</Text>
+          </View>
+        );
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => navigation.goBack()}
-          >
-            <Text>←</Text>
-          </TouchableOpacity>
-          <View>
-            <Text style={styles.pageTitle}>7-Day Forecast</Text>
-            <Text style={styles.locationName}>{location}</Text>
-          </View>
-          <View style={styles.dummySpace} />
-        </View>
+      <StatusBar barStyle="light-content" />
+      <SafeAreaView style={styles.safeAreaTop} />
 
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text>←</Text>
+        </TouchableOpacity>
+        <View>
+          <Text style={styles.pageTitle}>7-Day Forecast</Text>
+          <Text style={styles.locationName}>{location}</Text>
+        </View>
+        <View style={styles.dummySpace} />
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
         {forecastData?.current && (
           <View style={styles.currentSummary}>
             <Text style={styles.currentTemp}>{Math.round(forecastData.current.temp_c)}°</Text>
             <View style={styles.currentDetails}>
               <Text style={styles.currentCondition}>{forecastData.current.condition.text}</Text>
               <Text style={styles.highLow}>
-                High: {Math.round(forecastData.forecast.forecastday[0].day.maxtemp_c)}° • 
+                High: {Math.round(forecastData.forecast.forecastday[0].day.maxtemp_c)}° •
                 Low: {Math.round(forecastData.forecast.forecastday[0].day.mintemp_c)}°
               </Text>
             </View>
@@ -75,83 +194,27 @@ const ForecastScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
         )}
 
         <View style={styles.forecastTabs}>
-          <TouchableOpacity style={[styles.tab, styles.activeTab]}>
-            <Text>24 Hours</Text>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === '24hours' && styles.activeTab]}
+            onPress={() => setActiveTab('24hours')}
+          >
+            <Text style={styles.tabText}>24 Hours</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.tab}>
-            <Text>7 Days</Text>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === '7days' && styles.activeTab]}
+            onPress={() => setActiveTab('7days')}
+          >
+            <Text style={styles.tabText}>7 Days</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.tab}>
-            <Text>Radar</Text>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'radar' && styles.activeTab]}
+            onPress={() => setActiveTab('radar')}
+          >
+            <Text style={styles.tabText}>Radar</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.dailyForecast}>
-          <Text style={styles.sectionTitle}>7-Day Forecast</Text>
-          <View style={styles.dayCards}>
-            {forecastData?.forecast?.forecastday?.map((day: any, index: number) => (
-              <View key={index}>
-                <TouchableOpacity 
-                  style={styles.dayCard}
-                  onPress={() => toggleDayExpand(index)}
-                >
-                  <View style={styles.dayInfo}>
-                    <Text style={styles.dayName}>
-                      {index === 0 ? 'Today' : index === 1 ? 'Tomorrow' : new Date(day.date).toLocaleDateString('en-US', { weekday: 'long' })}
-                    </Text>
-                    <Text style={styles.dayDate}>
-                      {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </Text>
-                  </View>
-                  <Text style={styles.dayIcon}>
-                    {getWeatherIcon(day.day.condition.text, 12)} {/* Using noon for day icon */}
-                  </Text>
-                  <View style={styles.dayTemps}>
-                    <Text style={styles.dayHigh}>{Math.round(day.day.maxtemp_c)}°</Text>
-                    <Text style={styles.dayLow}>{Math.round(day.day.mintemp_c)}°</Text>
-                  </View>
-                </TouchableOpacity>
-
-                {expandedDay === index && (
-                  <View style={styles.dayDetails}>
-                    <View style={styles.detailsGrid}>
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Precipitation</Text>
-                        <Text style={styles.detailValue}>{day.day.daily_chance_of_rain}%</Text>
-                      </View>
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Humidity</Text>
-                        <Text style={styles.detailValue}>{day.day.avghumidity}%</Text>
-                      </View>
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Wind</Text>
-                        <Text style={styles.detailValue}>{day.day.maxwind_kph} km/h</Text>
-                      </View>
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>UV Index</Text>
-                        <Text style={styles.detailValue}>{day.day.uv} ({getUvIndexLevel(day.day.uv)})</Text>
-                      </View>
-                    </View>
-
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hourlyScroll}>
-                      {day.hour.map((hour: any, hourIndex: number) => (
-                        <View key={hourIndex} style={styles.hourCard}>
-                          <Text style={styles.hourTime}>
-                            {hourIndex === 0 ? 'Now' : new Date(hour.time).getHours() + ':00'}
-                          </Text>
-                          <Text style={styles.hourIcon}>
-                            {getWeatherIcon(hour.condition.text, new Date(hour.time).getHours())}
-                          </Text>
-                          <Text style={styles.hourTemp}>{Math.round(hour.temp_c)}°</Text>
-                        </View>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-            ))}
-          </View>
-        </View>
+        {renderTabContent()}
       </ScrollView>
 
       <NavBar items={navItems} />
@@ -162,7 +225,7 @@ const ForecastScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
 const getWeatherIcon = (condition: string, hour: number) => {
   // Same as in HomeScreen.tsx
   const isDay = hour > 6 && hour < 18;
-  
+
   if (condition.toLowerCase().includes('sunny') || condition.toLowerCase().includes('clear')) {
     return isDay ? '☀️' : '🌙';
   } else if (condition.toLowerCase().includes('cloud')) {
@@ -191,41 +254,44 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  scrollContainer: {
-    paddingBottom: 100,
+  safeAreaTop: {
+    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: theme.spacing.large,
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    padding: 16,
+    paddingTop: 8,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   pageTitle: {
-    fontSize: theme.fontSize.xxlarge,
+    fontSize: 20,
     fontWeight: 'bold',
     color: theme.colors.text,
     textAlign: 'center',
   },
   locationName: {
-    fontSize: theme.fontSize.medium,
+    fontSize: 14,
     color: theme.colors.text,
     opacity: 0.8,
     textAlign: 'center',
   },
   dummySpace: {
-    width: 44,
+    width: 40,
+  },
+  scrollContainer: {
+    paddingBottom: 100, 
   },
   currentSummary: {
-    margin: theme.spacing.large,
+    margin: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -239,160 +305,191 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   currentCondition: {
-    fontSize: theme.fontSize.xlarge,
+    fontSize: 18,
     fontWeight: 'bold',
     color: theme.colors.text,
-    marginBottom: theme.spacing.small,
+    marginBottom: 4,
   },
   highLow: {
-    fontSize: theme.fontSize.medium,
+    fontSize: 14,
     color: theme.colors.text,
     opacity: 0.8,
   },
   weatherAlert: {
-    margin: theme.spacing.large,
-    padding: theme.spacing.medium,
-    backgroundColor: theme.colors.alert,
-    borderRadius: theme.borderRadius.medium,
+    margin: 16,
+    padding: 16,
+    backgroundColor: 'rgba(251, 86, 7, 0.3)',
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: theme.spacing.medium,
+    gap: 12,
   },
   alertIcon: {
-    fontSize: theme.fontSize.xxxlarge,
-    color: theme.colors.alertIcon,
+    fontSize: 24,
+    color: '#ffb74d',
   },
   alertTitle: {
-    fontSize: theme.fontSize.large,
+    fontSize: 16,
     fontWeight: 'bold',
     color: theme.colors.text,
-    marginBottom: theme.spacing.small,
+    marginBottom: 4,
   },
   alertMessage: {
-    fontSize: theme.fontSize.medium,
+    fontSize: 14,
     color: theme.colors.text,
   },
   forecastTabs: {
     flexDirection: 'row',
-    margin: theme.spacing.large,
-    gap: theme.spacing.small,
+    margin: 16,
+    gap: 8,
   },
   tab: {
-    padding: theme.spacing.small,
-    paddingHorizontal: theme.spacing.medium,
-    borderRadius: theme.borderRadius.xlarge,
-    fontSize: theme.fontSize.medium,
+    padding: 8,
+    paddingHorizontal: 16,
+    borderRadius: 25,
+    fontSize: 14,
     fontWeight: 'bold',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   activeTab: {
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
-  dailyForecast: {
-    margin: theme.spacing.large,
-  },
-  sectionTitle: {
-    fontSize: theme.fontSize.xlarge,
-    fontWeight: 'bold',
+  tabText: {
     color: theme.colors.text,
-    marginBottom: theme.spacing.medium,
+    fontSize: 14,
+  },
+  dailyForecast: {
+    margin: 16,
   },
   dayCards: {
-    gap: theme.spacing.medium,
+    gap: 12,
   },
   dayCard: {
-    padding: theme.spacing.large,
+    padding: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: theme.borderRadius.medium,
+    borderRadius: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   dayInfo: {},
   dayName: {
-    fontSize: theme.fontSize.large,
+    fontSize: 16,
     fontWeight: 'bold',
     color: theme.colors.text,
-    marginBottom: theme.spacing.small,
+    marginBottom: 4,
   },
   dayDate: {
-    fontSize: theme.fontSize.small,
+    fontSize: 12,
     color: theme.colors.text,
     opacity: 0.8,
   },
   dayIcon: {
-    fontSize: theme.fontSize.xxxlarge,
+    fontSize: 24,
   },
   dayTemps: {
     alignItems: 'flex-end',
   },
   dayHigh: {
-    fontSize: theme.fontSize.xlarge,
+    fontSize: 18,
     fontWeight: 'bold',
     color: theme.colors.text,
   },
   dayLow: {
-    fontSize: theme.fontSize.medium,
+    fontSize: 14,
     color: theme.colors.text,
     opacity: 0.8,
   },
   dayDetails: {
     marginTop: -5,
-    marginBottom: theme.spacing.medium,
-    padding: theme.spacing.large,
+    marginBottom: 12,
+    padding: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderBottomLeftRadius: theme.borderRadius.medium,
-    borderBottomRightRadius: theme.borderRadius.medium,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
   },
   detailsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.medium,
-    marginBottom: theme.spacing.medium,
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   detailItem: {
     width: '48%',
-    padding: theme.spacing.small,
+    padding: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: theme.borderRadius.small,
+    borderRadius: 8,
+    marginBottom: 8,
   },
   detailLabel: {
-    fontSize: theme.fontSize.small,
+    fontSize: 12,
     color: theme.colors.text,
     opacity: 0.8,
-    marginBottom: theme.spacing.small,
+    marginBottom: 4,
   },
   detailValue: {
-    fontSize: theme.fontSize.large,
+    fontSize: 16,
     fontWeight: 'bold',
     color: theme.colors.text,
   },
   hourlyScroll: {
-    flexDirection: 'row',
-    gap: theme.spacing.medium,
-    paddingVertical: theme.spacing.small,
+    marginTop: 12,
   },
   hourCard: {
     minWidth: 60,
-    padding: theme.spacing.small,
+    padding: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: theme.borderRadius.small,
+    borderRadius: 8,
     alignItems: 'center',
+    marginRight: 8,
   },
   hourTime: {
-    fontSize: theme.fontSize.small,
+    fontSize: 12,
     color: theme.colors.text,
     opacity: 0.8,
-    marginBottom: theme.spacing.small,
+    marginBottom: 4,
   },
   hourIcon: {
-    fontSize: theme.fontSize.xxlarge,
-    marginVertical: theme.spacing.small,
+    fontSize: 20,
+    marginVertical: 4,
   },
   hourTemp: {
-    fontSize: theme.fontSize.medium,
+    fontSize: 14,
     fontWeight: 'bold',
     color: theme.colors.text,
+  },
+  placeholderContainer: {
+    margin: 16,
+    padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 200,
+  },
+  placeholderText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: 12,
+  },
+  placeholderSubtext: {
+    fontSize: 14,
+    color: theme.colors.text,
+    opacity: 0.8,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  navigateButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  navigateButtonText: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
 

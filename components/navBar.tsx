@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { theme } from '../styles/theme';
@@ -16,15 +15,16 @@ interface NavBarProps {
 
 const NavBar: React.FC<NavBarProps> = ({ items }) => {
   return (
-    <View style={styles.container}>
+    <View style={styles.navBarContainer}>
       {items.map((item, index) => (
         <TouchableOpacity
           key={index}
-          style={[styles.navItem, item.isActive && styles.activeItem]}
+          style={styles.navItem}
           onPress={item.onPress}
         >
-          <Text style={styles.icon}>{item.icon}</Text>
-          <Text style={styles.label}>{item.label}</Text>
+          <Text style={[styles.icon, item.isActive && styles.activeIcon]}>{item.icon}</Text>
+          <Text style={[styles.label, item.isActive && styles.activeLabel]}>{item.label}</Text>
+          {item.isActive && <View style={styles.activeDot} />}
         </TouchableOpacity>
       ))}
     </View>
@@ -32,33 +32,44 @@ const NavBar: React.FC<NavBarProps> = ({ items }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  navBarContainer: {
     position: 'absolute',
-    bottom: theme.spacing.large,
-    left: theme.spacing.large,
-    right: theme.spacing.large,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: theme.borderRadius.large,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: theme.colors.background,
     flexDirection: 'row',
     justifyContent: 'space-around',
-    padding: theme.spacing.medium,
+    paddingTop: 8,
+    paddingBottom: 32,
+    borderTopWidth: 0,
   },
   navItem: {
     alignItems: 'center',
-    padding: theme.spacing.small,
-    minWidth: 60,
-  },
-  activeItem: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: theme.borderRadius.medium,
+    paddingVertical: 6,
+    width: 70,
   },
   icon: {
-    fontSize: theme.fontSize.xxxlarge,
-    marginBottom: theme.spacing.small,
+    fontSize: 22,
+    marginBottom: 2,
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  activeIcon: {
+    color: theme.colors.text,
   },
   label: {
-    fontSize: theme.fontSize.small,
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  activeLabel: {
     color: theme.colors.text,
+  },
+  activeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.colors.text,
+    marginTop: 2,
   },
 });
 

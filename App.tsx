@@ -6,6 +6,8 @@ import { createStackNavigator } from '@react-navigation/stack';
 import HomeScreen from './app/homeScreen';
 import ForecastScreen from './app/forecastScreen';
 import LocationScreen from './app/locationScreen';
+import RadarScreen from './app/radarScreen';
+import InsightsScreen from './app/insightsScreen';
 
 const Stack = createStackNavigator();
 
@@ -22,6 +24,8 @@ const App = () => {
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Forecast" component={ForecastScreen} />
         <Stack.Screen name="Location" component={LocationScreen} />
+        <Stack.Screen name="Radar" component={RadarScreen} />
+        <Stack.Screen name="Insights" component={InsightsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

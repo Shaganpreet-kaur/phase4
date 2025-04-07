@@ -1,9 +1,10 @@
 // src/screens/LocationScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, ScrollView, TextInput, TouchableOpacity, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { theme } from '../styles/theme';
 import NavBar from '../components/navBar';
 import WeatherService from '../services/API';
+import LocationService from '../services/locationService';
 
 const LocationScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, route }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,6 +20,7 @@ const LocationScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
     { name: 'Tokyo', details: 'Japan', temp: '16°' },
     { name: 'Sydney', details: 'Australia', temp: '25°' },
   ]);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   useEffect(() => {
     if (searchQuery.length > 2) {
@@ -44,19 +46,52 @@ const LocationScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
     navigation.navigate('Home', { location });
   };
 
+  const getCurrentLocation = async () => {
+    try {
+      setLocationLoading(true);
+      const locationData = await LocationService.getCurrentLocation();
+      if (locationData && locationData.city) {
+        // Add to recent locations if it doesn't already exist there
+        const currentLocIndex = recentLocations.findIndex(loc =>
+          loc.icon === '📍' && loc.details === 'Current Location');
+
+        // If found, update it
+        if (currentLocIndex >= 0) {
+          const updatedLocations = [...recentLocations];
+          updatedLocations[currentLocIndex] = {
+            ...updatedLocations[currentLocIndex],
+            name: locationData.city
+          };
+          setRecentLocations(updatedLocations);
+        }
+
+        handleLocationSelect(locationData.city);
+      }
+    } catch (error) {
+      console.error('Error getting current location:', error);
+      Alert.alert(
+        "Location Error",
+        "Unable to access your current location. Please ensure location services are enabled.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
   const navItems = [
     { icon: '🏠', label: 'Today', onPress: () => navigation.navigate('Home') },
     { icon: '📅', label: 'Forecast', onPress: () => navigation.navigate('Forecast') },
-    { icon: '🗺️', label: 'Radar', onPress: () => {} },
-    { icon: '📊', label: 'Insights', onPress: () => {} },
+    { icon: '🗺️', label: 'Radar', onPress: () => navigation.navigate('Radar') },
+    { icon: '📊', label: 'Insights', onPress: () => navigation.navigate('Insights') },
   ];
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton} 
+          <TouchableOpacity
+            style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
             <Text>←</Text>
@@ -78,12 +113,19 @@ const LocationScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
           </View>
         </View>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.currentLocation}
-          onPress={() => handleLocationSelect('Current Location')}
+          onPress={getCurrentLocation}
+          disabled={locationLoading}
         >
-          <Text style={styles.locationIcon}>📍</Text>
-          <Text style={styles.locationText}>Use current location</Text>
+          {locationLoading ? (
+            <ActivityIndicator size="small" color="white" style={{marginRight: 15}} />
+          ) : (
+            <Text style={styles.locationIcon}>📍</Text>
+          )}
+          <Text style={styles.locationText}>
+            {locationLoading ? "Getting current location..." : "Use current location"}
+          </Text>
         </TouchableOpacity>
 
         {searchResults.length > 0 ? (
@@ -94,7 +136,7 @@ const LocationScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
                 <TouchableOpacity
                   key={index}
                   style={styles.locationItem}
-                  onPress={() => handleLocationSelect(location.name)}
+                  onPress={() => handleLocationSelect(`${location.name}, ${location.region || location.country}`)}
                 >
                   <View style={styles.locationLeft}>
                     <Text style={styles.locationIcon}>📱</Text>
@@ -188,6 +230,7 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.xxlarge,
     fontWeight: 'bold',
     color: theme.colors.text,
+    textAlign: 'center',
   },
   dummySpace: {
     width: 44,
