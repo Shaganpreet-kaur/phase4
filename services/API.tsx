@@ -38,5 +38,9 @@ const WeatherService = {
     }
   },
 };
+<<<<<<< HEAD
+export default WeatherService;
+=======
 
 export default WeatherService;
+>>>>>>> 45b2821fda606dcb6a84e619a6247e9d7600608d
