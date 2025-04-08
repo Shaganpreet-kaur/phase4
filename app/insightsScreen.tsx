@@ -1,13 +1,115 @@
-// src/screens/InsightsScreen.tsx
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
 import { theme } from '../styles/theme';
 import NavBar from '../components/navBar';
 import SafeAreaContainer from '../components/safeAreaContainer';
+import WeatherService from '../services/API';
+
+const extendedWeatherService = {
+  ...WeatherService,
+  getHistoricalWeather: async (city: string, date: string): Promise<any> => {
+    try {
+      const response = await fetch(
+        `https://api.weatherapi.com/v1/history.json?key=1d04f720c29b4685af1143558252703&q=${city}&dt=${date}`
+      );
+      return response.json();
+    } catch (error) {
+      console.error('Error fetching historical data:', error);
+      throw error;
+    }
+  },
+};
 
 const InsightsScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, route }) => {
   const [activeTab, setActiveTab] = useState<string>('temperature');
+  const [activePeriod, setActivePeriod] = useState<string>('month');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [historicalData, setHistoricalData] = useState<any>({
+    today: null,
+    yesterday: null,
+    lastWeek: null,
+    lastMonth: null,
+  });
+  const [trendData, setTrendData] = useState<any>({
+    direction: '',
+    difference: 0,
+    message: '',
+  });
   const location = route.params?.location || 'Calgary, AB';
+
+  useEffect(() => {
+    fetchHistoricalData();
+  }, [location]);
+
+  const formatDate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const fetchHistoricalData = async () => {
+    setLoading(true);
+    try {
+      // Calculate dates
+      const today = new Date();
+      const yesterday = new Date();
+      yesterday.setDate(today.getDate() - 1);
+      const lastWeek = new Date();
+      lastWeek.setDate(today.getDate() - 7);
+      const lastMonth = new Date();
+      lastMonth.setMonth(today.getMonth() - 1);
+
+      // Fetch current weather
+      const currentData = await extendedWeatherService.getCurrentWeather(location);
+      
+      // Fetch historical data
+      const yesterdayData = await extendedWeatherService.getHistoricalWeather(
+        location, 
+        formatDate(yesterday)
+      );
+      
+      const lastWeekData = await extendedWeatherService.getHistoricalWeather(
+        location, 
+        formatDate(lastWeek)
+      );
+      
+      const lastMonthData = await extendedWeatherService.getHistoricalWeather(
+        location, 
+        formatDate(lastMonth)
+      );
+
+      // Extract temperatures
+      const todayTemp = Math.round(currentData.current.temp_c);
+      const yesterdayTemp = Math.round(yesterdayData.forecast.forecastday[0].day.avgtemp_c);
+      const lastWeekTemp = Math.round(lastWeekData.forecast.forecastday[0].day.avgtemp_c);
+      const lastMonthTemp = Math.round(lastMonthData.forecast.forecastday[0].day.avgtemp_c);
+
+      // Calculate trend
+      const weekTrendDiff = todayTemp - lastWeekTemp;
+      const trendDirection = weekTrendDiff > 0 ? 'rising' : weekTrendDiff < 0 ? 'falling' : 'stable';
+      const trendMessage = `Temperatures have ${trendDirection === 'stable' ? 'remained stable' : 
+        trendDirection === 'rising' ? 'increased' : 'decreased'} by ${Math.abs(weekTrendDiff)}° compared to last week.`;
+
+      setHistoricalData({
+        today: todayTemp,
+        yesterday: yesterdayTemp,
+        lastWeek: lastWeekTemp,
+        lastMonth: lastMonthTemp,
+      });
+
+      setTrendData({
+        direction: trendDirection,
+        difference: Math.abs(weekTrendDiff),
+        message: trendMessage,
+      });
+
+    } catch (error) {
+      console.error('Error fetching historical data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const navItems = [
     { icon: '🏠', label: 'Today', onPress: () => navigation.navigate('Home') },
@@ -36,41 +138,53 @@ const InsightsScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
             <View style={styles.insightsContainer}>
               <Text style={styles.insightTitle}>Temperature Trends</Text>
 
-              <View style={styles.insightCards}>
-                <View style={styles.insightCard}>
-                  <Text style={styles.insightValue}>-2°</Text>
-                  <Text style={styles.insightLabel}>Today</Text>
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="white" />
+                  <Text style={styles.loadingText}>Loading historical data...</Text>
                 </View>
-                <View style={styles.insightCard}>
-                  <Text style={styles.insightValue}>-3°</Text>
-                  <Text style={styles.insightLabel}>Yesterday</Text>
-                </View>
-                <View style={styles.insightCard}>
-                  <Text style={styles.insightValue}>-5°</Text>
-                  <Text style={styles.insightLabel}>Week Ago</Text>
-                </View>
-                <View style={styles.insightCard}>
-                  <Text style={styles.insightValue}>0°</Text>
-                  <Text style={styles.insightLabel}>Month Avg</Text>
-                </View>
-              </View>
+              ) : (
+                <>
+                  <View style={styles.insightCards}>
+                    <View style={styles.insightCard}>
+                      <Text style={styles.insightValue}>{historicalData.today}°</Text>
+                      <Text style={styles.insightLabel}>Today</Text>
+                    </View>
+                    <View style={styles.insightCard}>
+                      <Text style={styles.insightValue}>{historicalData.yesterday}°</Text>
+                      <Text style={styles.insightLabel}>Yesterday</Text>
+                    </View>
+                    <View style={styles.insightCard}>
+                      <Text style={styles.insightValue}>{historicalData.lastWeek}°</Text>
+                      <Text style={styles.insightLabel}>Week Ago</Text>
+                    </View>
+                    <View style={styles.insightCard}>
+                      <Text style={styles.insightValue}>{historicalData.lastMonth}°</Text>
+                      <Text style={styles.insightLabel}>Month Avg</Text>
+                    </View>
+                  </View>
 
-              <View style={styles.trendCard}>
-                <Text style={styles.trendIcon}>↗️</Text>
-                <View>
-                  <Text style={styles.trendTitle}>
-                    Temperatures are rising
-                  </Text>
-                  <Text style={styles.trendText}>
-                    Temperatures have increased by 3° compared to last week.
-                  </Text>
-                </View>
-              </View>
+                  <View style={styles.trendCard}>
+                    <Text style={styles.trendIcon}>
+                      {trendData.direction === 'rising' ? '↗️' : 
+                       trendData.direction === 'falling' ? '↘️' : '➡️'}
+                    </Text>
+                    <View>
+                      <Text style={styles.trendTitle}>
+                        Temperatures are {trendData.direction}
+                      </Text>
+                      <Text style={styles.trendText}>
+                        {trendData.message}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
 
               <View style={styles.notesCard}>
                 <Text style={styles.notesTitle}>Historical Note</Text>
                 <Text style={styles.notesText}>
-                  This spring has been colder than usual for {location}.
+                  This spring has been {historicalData.today < 5 ? 'colder' : 'warmer'} than usual for {location}.
                   The average temperature for this time of year is typically around 5°C.
                 </Text>
               </View>
@@ -129,13 +243,22 @@ const InsightsScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
         </SafeAreaView>
 
         <View style={styles.periodSelector}>
-          <TouchableOpacity style={[styles.periodButton, styles.activePeriod]}>
+          <TouchableOpacity 
+            style={[styles.periodButton, activePeriod === 'month' && styles.activePeriod]}
+            onPress={() => setActivePeriod('month')}
+          >
             <Text style={styles.periodText}>Month</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.periodButton}>
+          <TouchableOpacity 
+            style={[styles.periodButton, activePeriod === 'season' && styles.activePeriod]}
+            onPress={() => setActivePeriod('season')}
+          >
             <Text style={styles.periodText}>Season</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.periodButton}>
+          <TouchableOpacity 
+            style={[styles.periodButton, activePeriod === 'year' && styles.activePeriod]}
+            onPress={() => setActivePeriod('year')}
+          >
             <Text style={styles.periodText}>Year</Text>
           </TouchableOpacity>
         </View>
@@ -353,8 +476,18 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     textAlign: 'center',
   },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: theme.colors.text,
+    marginTop: 10,
+  },
   bottomPadding: {
-    height: 80, // Extra padding for bottom safe area
+    height: 80, 
   },
 });
 

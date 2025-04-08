@@ -45,9 +45,6 @@ const ForecastScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
               const hourTime = new Date(hour.time).getHours();
               const currentHour = new Date().getHours();
               
-              // Only show current and future hours
-              if (hourTime < currentHour && hourIndex > 0) return null;
-              
               return (
                 <View key={hourIndex} style={[
                   styles.hourCard, 
@@ -66,7 +63,7 @@ const ForecastScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
                   )}
                 </View>
               );
-            }).filter(Boolean)}
+            })}
           </ScrollView>
         );
       case '7days':

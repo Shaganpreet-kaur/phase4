@@ -1,4 +1,3 @@
-// src/screens/LocationScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, TextInput, TouchableOpacity, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { theme } from '../styles/theme';
@@ -51,11 +50,9 @@ const LocationScreen: React.FC<{ navigation: any, route: any }> = ({ navigation,
       setLocationLoading(true);
       const locationData = await LocationService.getCurrentLocation();
       if (locationData && locationData.city) {
-        // Add to recent locations if it doesn't already exist there
         const currentLocIndex = recentLocations.findIndex(loc =>
           loc.icon === '📍' && loc.details === 'Current Location');
 
-        // If found, update it
         if (currentLocIndex >= 0) {
           const updatedLocations = [...recentLocations];
           updatedLocations[currentLocIndex] = {

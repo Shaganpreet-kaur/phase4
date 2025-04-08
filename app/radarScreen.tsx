@@ -1,13 +1,132 @@
-// src/screens/RadarScreen.tsx
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
+// app/radarScreen.tsx
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+  ActivityIndicator,
+  Image,
+  Dimensions
+} from 'react-native';
+import { WebView } from 'react-native-webview';
 import { theme } from '../styles/theme';
 import NavBar from '../components/navBar';
 import SafeAreaContainer from '../components/safeAreaContainer';
+import WeatherService from '../services/API';
+
+const { width } = Dimensions.get('window');
 
 const RadarScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, route }) => {
   const [selectedMap, setSelectedMap] = useState<string>('precipitation');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [frames, setFrames] = useState<any[]>([]);
+  const [selectedFrame, setSelectedFrame] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [coordinates, setCoordinates] = useState<{lat: number, lon: number}>({ lat: 40.7128, lon: -74.0060 });
+  const animationRef = useRef<NodeJS.Timeout | null>(null);
+  
   const location = route.params?.location || 'Calgary, AB';
+
+  useEffect(() => {
+    fetchLocationAndRadarData();
+    
+    // Clean up animation on unmount
+    return () => {
+      if (animationRef.current) {
+        clearInterval(animationRef.current);
+      }
+    };
+  }, [location]);
+
+  useEffect(() => {
+    // Stop animation when changing tabs
+    if (selectedMap !== 'precipitation' && isPlaying) {
+      stopAnimation();
+    }
+  }, [selectedMap]);
+
+  const fetchLocationAndRadarData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const coords = await WeatherService.getCoordinates(location);
+      setCoordinates(coords);
+      
+      // Fetch radar data
+      const radarData = await WeatherService.getRadarData();
+      
+      if (radarData && radarData.radar && radarData.radar.past) {
+        const formattedFrames = radarData.radar.past.map((frame: any) => {
+          const date = new Date(frame.time * 1000);
+          const hours = date.getHours().toString().padStart(2, '0');
+          const minutes = date.getMinutes().toString().padStart(2, '0');
+          
+          const tileX = long2tile(coords.lon, 8);
+          const tileY = lat2tile(coords.lat, 8);
+          
+          return {
+            time: `${hours}:${minutes}`,
+            date: date,
+            imageUrl: `https://${radarData.host}${frame.path}/8/${tileX}/${tileY}/4/1.png`
+          };
+        });
+        
+        setFrames(formattedFrames);
+        setSelectedFrame(formattedFrames.length - 1);
+      } else {
+        setError('No radar data available for this location');
+      }
+    } catch (err) {
+      console.error('Error fetching radar data:', err);
+      setError('Unable to load radar data. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const long2tile = (lon: number, zoom: number) => {
+    return Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
+  };
+  
+  const lat2tile = (lat: number, zoom: number) => {
+    return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+  };
+
+  const playAnimation = () => {
+    if (animationRef.current) {
+      clearInterval(animationRef.current);
+    }
+    
+    setIsPlaying(true);
+    
+    animationRef.current = setInterval(() => {
+      setSelectedFrame((prevFrame) => {
+        const nextFrame = (prevFrame + 1) % frames.length;
+        return nextFrame;
+      });
+    }, 500); // Change frame every 500ms
+  };
+
+  const stopAnimation = () => {
+    if (animationRef.current) {
+      clearInterval(animationRef.current);
+      animationRef.current = null;
+    }
+    setIsPlaying(false);
+  };
+
+  const toggleAnimation = () => {
+    if (isPlaying) {
+      stopAnimation();
+    } else {
+      playAnimation();
+    }
+  };
 
   const navItems = [
     { icon: '🏠', label: 'Today', onPress: () => navigation.navigate('Home') },
@@ -16,13 +135,202 @@ const RadarScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, ro
     { icon: '📊', label: 'Insights', onPress: () => navigation.navigate('Insights', { location }) },
   ];
 
-  // Map type options
   const mapTypes = [
     { id: 'precipitation', label: 'Precipitation' },
     { id: 'temperature', label: 'Temperature' },
     { id: 'wind', label: 'Wind' },
     { id: 'pressure', label: 'Pressure' },
   ];
+
+  const renderMapContent = () => {
+    switch (selectedMap) {
+      case 'precipitation':
+        if (loading) {
+          return (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="white" />
+              <Text style={styles.loadingText}>Loading radar data...</Text>
+            </View>
+          );
+        }
+        
+        if (error) {
+          return (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={fetchLocationAndRadarData}
+              >
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        }
+        
+        if (frames.length === 0) {
+          return (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>No radar frames available</Text>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={fetchLocationAndRadarData}
+              >
+                <Text style={styles.retryText}>Refresh</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        }
+        
+        return (
+          <View style={styles.mapContainer}>
+            <View style={styles.radarContainer}>
+              <Image 
+                source={{ uri: frames[selectedFrame]?.imageUrl }} 
+                style={styles.radarImage}
+                resizeMode="cover"
+              />
+              <View style={styles.locationMarker} />
+              
+              <View style={styles.timeIndicator}>
+                <Text style={styles.timeIndicatorText}>
+                  {frames[selectedFrame]?.time || 'Loading...'}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.legendContainer}>
+              <Text style={styles.legendTitle}>Precipitation Intensity</Text>
+              <View style={styles.legendItems}>
+                <View style={styles.legendScale}>
+                  <View style={[styles.legendColor, { backgroundColor: '#a1d3f8' }]} />
+                  <View style={[styles.legendColor, { backgroundColor: '#4fabf7' }]} />
+                  <View style={[styles.legendColor, { backgroundColor: '#2881dc' }]} />
+                  <View style={[styles.legendColor, { backgroundColor: '#0f5cbf' }]} />
+                  <View style={[styles.legendColor, { backgroundColor: '#00ff00' }]} />
+                  <View style={[styles.legendColor, { backgroundColor: '#ffff00' }]} />
+                  <View style={[styles.legendColor, { backgroundColor: '#ff9900' }]} />
+                  <View style={[styles.legendColor, { backgroundColor: '#ff0000' }]} />
+                </View>
+              </View>
+              <View style={styles.legendLabels}>
+                <Text style={styles.legendLabel}>Light</Text>
+                <Text style={styles.legendLabel}>Heavy</Text>
+              </View>
+            </View>
+            
+            <View style={styles.timelineContainer}>
+              <Text style={styles.timelineTitle}>Radar Timeline</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timelineScroll}>
+                {frames.map((frame, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.timelineItem,
+                      selectedFrame === index && styles.currentTimelineItem
+                    ]}
+                    onPress={() => {
+                      setSelectedFrame(index);
+                      if (isPlaying) stopAnimation();
+                    }}
+                  >
+                    <Text style={[
+                      styles.timelineText,
+                      selectedFrame === index && styles.currentTimelineText
+                    ]}>
+                      {frame.time}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.playButton}
+              onPress={toggleAnimation}
+            >
+              <Text style={styles.playButtonIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+              <Text style={styles.playButtonText}>
+                {isPlaying ? 'Pause Animation' : 'Play Animation'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        );
+        
+      case 'temperature':
+        return (
+          <View style={styles.webViewContainer}>
+            <WebView
+              source={{ 
+                uri: `https://openweathermap.org/weathermap?temp&lat=${coordinates.lat}&lon=${coordinates.lon}&zoom=5` 
+              }}
+              style={styles.webView}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={styles.webViewLoading}>
+                  <ActivityIndicator size="large" color="white" />
+                </View>
+              )}
+            />
+            <Text style={styles.webViewAttribution}>
+              Temperature data provided by OpenWeatherMap
+            </Text>
+          </View>
+        );
+        
+      case 'wind':
+        return (
+          <View style={styles.webViewContainer}>
+            <WebView
+              source={{ 
+                uri: `https://openweathermap.org/weathermap?wind&lat=${coordinates.lat}&lon=${coordinates.lon}&zoom=5` 
+              }}
+              style={styles.webView}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={styles.webViewLoading}>
+                  <ActivityIndicator size="large" color="white" />
+                </View>
+              )}
+            />
+            <Text style={styles.webViewAttribution}>
+              Wind data provided by OpenWeatherMap
+            </Text>
+          </View>
+        );
+
+      case 'pressure':
+        return (
+          <View style={styles.webViewContainer}>
+            <WebView
+              source={{ 
+                uri: `https://openweathermap.org/weathermap?pressure&lat=${coordinates.lat}&lon=${coordinates.lon}&zoom=5` 
+              }}
+              style={styles.webView}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={styles.webViewLoading}>
+                  <ActivityIndicator size="large" color="white" />
+                </View>
+              )}
+            />
+            <Text style={styles.webViewAttribution}>
+              Pressure data provided by OpenWeatherMap
+            </Text>
+          </View>
+        );
+        
+      default:
+        return (
+          <View style={styles.placeholderContainer}>
+            <Text style={styles.placeholderText}>Map Unavailable</Text>
+            <Text style={styles.placeholderSubtext}>
+              Select a different map type from the options above.
+            </Text>
+          </View>
+        );
+    }
+  };
 
   return (
     <SafeAreaContainer>
@@ -39,7 +347,12 @@ const RadarScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, ro
               <Text style={styles.pageTitle}>Weather Radar</Text>
               <Text style={styles.locationName}>{location}</Text>
             </View>
-            <View style={styles.dummySpace} />
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={fetchLocationAndRadarData}
+            >
+              <Text>↻</Text>
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
 
@@ -63,64 +376,7 @@ const RadarScreen: React.FC<{ navigation: any, route: any }> = ({ navigation, ro
           ))}
         </View>
 
-        <View style={styles.mapContainer}>
-          <View style={styles.mapPlaceholder}>
-            <Text style={styles.mapPlaceholderText}>
-              {selectedMap.charAt(0).toUpperCase() + selectedMap.slice(1)} Map
-            </Text>
-            <Text style={styles.mapPlaceholderSubtext}>
-              Interactive weather radar would display here
-            </Text>
-          </View>
-
-          <View style={styles.legendContainer}>
-            <Text style={styles.legendTitle}>{selectedMap.charAt(0).toUpperCase() + selectedMap.slice(1)} Legend</Text>
-            <View style={styles.legendItems}>
-              <View style={styles.legendScale}>
-                <View style={[styles.legendColor, { backgroundColor: '#ccfbff' }]} />
-                <View style={[styles.legendColor, { backgroundColor: '#82e4fb' }]} />
-                <View style={[styles.legendColor, { backgroundColor: '#33bbff' }]} />
-                <View style={[styles.legendColor, { backgroundColor: '#0073ff' }]} />
-                <View style={[styles.legendColor, { backgroundColor: '#00ff00' }]} />
-                <View style={[styles.legendColor, { backgroundColor: '#ffff00' }]} />
-                <View style={[styles.legendColor, { backgroundColor: '#ff9900' }]} />
-                <View style={[styles.legendColor, { backgroundColor: '#ff0000' }]} />
-              </View>
-            </View>
-            <View style={styles.legendLabels}>
-              <Text style={styles.legendLabel}>Low</Text>
-              <Text style={styles.legendLabel}>High</Text>
-            </View>
-          </View>
-
-          <View style={styles.timelineContainer}>
-            <Text style={styles.timelineTitle}>Timeline</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timelineScroll}>
-              {['-3h', '-2h', '-1h', 'Now', '+1h', '+2h', '+3h'].map((time, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.timelineItem,
-                    time === 'Now' && styles.currentTimelineItem
-                  ]}
-                >
-                  <Text style={[
-                    styles.timelineText,
-                    time === 'Now' && styles.currentTimelineText
-                  ]}>
-                    {time}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          <TouchableOpacity style={styles.playButton}>
-            <Text style={styles.playButtonIcon}>▶</Text>
-            <Text style={styles.playButtonText}>Play Animation</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.bottomPadding} />
+        {renderMapContent()}
       </ScrollView>
 
       <NavBar items={navItems} />
@@ -161,9 +417,6 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     textAlign: 'center',
   },
-  dummySpace: {
-    width: 40,
-  },
   mapTypeContainer: {
     flexDirection: 'row',
     margin: theme.spacing.large,
@@ -188,32 +441,96 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   mapContainer: {
-    margin: theme.spacing.large,
-    marginTop: 0,
+    marginHorizontal: theme.spacing.medium,
+    marginBottom: theme.spacing.medium,
   },
-  mapPlaceholder: {
-    height: 250,
+  radarContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 300,
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: 12,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  locationMarker: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    backgroundColor: 'rgba(255, 0, 0, 0.6)',
+    borderWidth: 2,
+    borderColor: 'white',
+    borderRadius: 6,
+    top: '50%',
+    left: '50%',
+    marginLeft: -6,
+    marginTop: -6,
+  },
+  timeIndicator: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  timeIndicatorText: {
+    color: 'white',
+    fontSize: 12,
+  },
+  loadingContainer: {
+    height: 300,
     justifyContent: 'center',
     alignItems: 'center',
+    marginHorizontal: theme.spacing.large,
+    marginBottom: theme.spacing.large,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
     borderRadius: 12,
-    marginBottom: 16,
+    padding: 20,
   },
-  mapPlaceholderText: {
-    fontSize: 18,
+  loadingText: {
+    marginTop: 10,
+    color: theme.colors.text,
+    fontSize: 16,
+  },
+  errorContainer: {
+    height: 300,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: theme.spacing.large,
+    marginBottom: theme.spacing.large,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: 12,
+    padding: 20,
+  },
+  errorText: {
+    color: theme.colors.text,
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: theme.colors.text,
     fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: 8,
-  },
-  mapPlaceholderSubtext: {
-    fontSize: 14,
-    color: theme.colors.text,
-    opacity: 0.7,
   },
   legendContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     padding: 12,
+    marginTop: 16,
     marginBottom: 16,
   },
   legendTitle: {
@@ -283,6 +600,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 12,
     padding: 12,
+    marginBottom: 16,
   },
   playButtonIcon: {
     color: theme.colors.text,
@@ -294,9 +612,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  bottomPadding: {
-    height: 80, 
+  placeholderContainer: {
+    height: 300,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: theme.spacing.large,
+    marginBottom: theme.spacing.large,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: 12,
+    padding: 20,
   },
+  placeholderText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  placeholderSubtext: {
+    fontSize: 14,
+    color: theme.colors.text,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  webViewContainer: {
+    marginHorizontal: theme.spacing.medium,
+    marginBottom: theme.spacing.large,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: 'white',
+    height: 400,
+  },
+  webView: {
+    flex: 1,
+    borderRadius: 12,
+  },
+  webViewLoading: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  webViewAttribution: {
+    padding: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    color: 'white',
+    fontSize: 10,
+    textAlign: 'center',
+  }
 });
 
 export default RadarScreen;
